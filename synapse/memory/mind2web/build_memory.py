@@ -41,6 +41,7 @@ def build_memory(memory_path: str, data_dir: str, top_k: int = 3):
         specifiers.append(get_specifiers_from_sample(sample))
         prev_obs = []
         prev_actions = []
+        prev_ids = []
         for s, act_repr in zip(sample["actions"], sample["action_reprs"]):
             # add prediction scores and ranks to candidates
             sample_id = f"{sample['annotation_id']}_{s['action_uid']}"
@@ -59,11 +60,12 @@ def build_memory(memory_path: str, data_dir: str, top_k: int = 3):
                 query = f"Task: {sample['confirmed_task']}\nTrajectory:\n"
                 prev_obs.append(query + "Observation: `" + target_obs + "`")
             prev_actions.append("Action: `" + target_act + "` (" + act_repr + ")")
+            prev_ids.append(sample_id)
 
         message = []
-        for o, a in zip(prev_obs, prev_actions):
-            message.append({"role": "user", "content": o})
-            message.append({"role": "assistant", "content": a})
+        for o, a, id in zip(prev_obs, prev_actions, prev_ids):
+            message.append({"role": "user", "content": o, "id":(id + "_observation")})
+            message.append({"role": "assistant", "content": a, "id": (id + "_action")})
         exemplars.append(message)
 
     with open(os.path.join(memory_path, "exemplars.json"), "w") as f:
@@ -73,7 +75,7 @@ def build_memory(memory_path: str, data_dir: str, top_k: int = 3):
 
     # embed memory_keys into VectorDB
     embedding = OpenAIEmbeddings(model="text-embedding-ada-002")
-    metadatas = [{"name": i} for i in range(len(specifiers))]
+    metadatas = [{"name": i, "annotation_id": samples[i]["annotation_id"]} for i in range(len(specifiers))]
     memory = FAISS.from_texts(
         texts=specifiers,
         embedding=embedding,
@@ -85,12 +87,14 @@ def build_memory(memory_path: str, data_dir: str, top_k: int = 3):
 def retrieve_exemplar_name(memory, query: str, top_k) -> tuple[list[str], list[float]]:
     docs_and_similarities = memory.similarity_search_with_score(query, top_k)
     retrieved_exemplar_names = []
+    retrieved_exemplar_ids = []
     scores = []
     for doc, score in docs_and_similarities:
         retrieved_exemplar_names.append(doc.metadata["name"])
+        retrieved_exemplar_ids.append(doc.metadata["annotation_id"])
         scores.append(score)
 
-    return retrieved_exemplar_names, scores
+    return retrieved_exemplar_names, scores , retrieved_exemplar_ids
 
 
 def load_memory(memory_path):

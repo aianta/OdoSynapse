@@ -37,6 +37,9 @@ def num_tokens_from_messages(messages, model):
     }:
         tokens_per_message = 3
         tokens_per_name = 1
+    elif "gpt-3.5-turbo" in model:
+        print("Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.")
+        return num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613")
     elif model == "gpt-3.5-turbo-0301":
         tokens_per_message = (
             4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
@@ -60,6 +63,8 @@ def num_tokens_from_messages(messages, model):
 MAX_TOKENS = {
     "gpt-3.5-turbo-0301": 4097,
     "gpt-3.5-turbo-0613": 4097,
+    "gpt-3.5-turbo-0125": 16385,
+    "gpt-3.5-turbo": 16385,
     "gpt-3.5-turbo-16k-0613": 16385,
     "gpt-3.5-turbo-1106": 16385,
 }
@@ -100,7 +105,7 @@ def generate_response(
     stop_tokens: list[str] | None = None,
 ) -> tuple[str, dict[str, int]]:
     """Send a request to the OpenAI API."""
-
+    # try:
     logger.info(
         f"Send a request to the language model from {inspect.stack()[1].function}"
     )
@@ -129,6 +134,10 @@ def generate_response(
     }
 
     return message, info
+    # except Exception as ex:
+    #     template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+    #     message = template.format(type(ex).__name__, ex.args)
+    #     print(message)
 
 
 def extract_from_response(response: str, backtick="```") -> str:

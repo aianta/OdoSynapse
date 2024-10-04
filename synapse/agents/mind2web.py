@@ -37,6 +37,10 @@ def eval_sample(task_id, args, sample):
     conversation = []
     episode_length = len(sample["action_reprs"])
 
+    '''
+    Memory and exemplar setup.
+    '''
+
     if args.no_trajectory:
         assert args.no_memory
         exemplars = [
@@ -84,17 +88,21 @@ def eval_sample(task_id, args, sample):
         }
     ]
 
+
+
     prev_actions = []
     prev_obs = []
     previous_k = 5
 
     for s, act_repr in zip(sample["actions"], sample["action_reprs"]):
-        _, target_act = get_target_obs_and_act(s)
+        # Here I believe 's' is the action object
+        _, target_act = get_target_obs_and_act(s) # Get target observation? and action?
         pos_candidates = [
             c for c in s["pos_candidates"] if c["rank"] < args.top_k_elements
         ]
 
         if args.no_trajectory:
+            # Interesting, we simply give up if the ground truth element is not in the cleaned HTML...
             # Continue next loop if the ground truth element is not in the cleaned html
             if len(pos_candidates) == 0:
                 element_acc.append(0)
@@ -103,17 +111,24 @@ def eval_sample(task_id, args, sample):
                 prev_actions.append(act_repr)
                 conversation.append("The ground truth element is not in cleaned html")
                 continue
-
+            
+            # Here I guess we get the refined observation and all candidates (pos/neg)...
             obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+            # Setup query string for the prompt.
             query = f"Observation:\n```\n{obs}\n```\nTask: {sample['confirmed_task']}\nPrevious actions:\n"
+            # Add previous k number of previous actions to the query string, by default 5
             if len(prev_actions) > 0:
                 for a in prev_actions[-previous_k:]:
                     query += f"{a}\n"
             else:
                 query += "None\n"
+
+            # Prompt LLM for next action    
             query += "Next action:"
+
+            # Assemble prompt into correct format for API invokation. 
             query = [{"role": "user", "content": query}]
-            prev_actions.append(act_repr)
+            prev_actions.append(act_repr) # Add the action representation to the previous action list. 
         else:
             target_obs, _ = get_top_k_obs(s, args.previous_top_k_elements)
             # Continue next loop if the ground truth element is not in the cleaned html
@@ -170,7 +185,8 @@ def eval_sample(task_id, args, sample):
                 }
             )
             continue
-
+        
+        # Demonstration message, the part containing related exemplars.
         demo_message = []
         for e_id, e in enumerate(exemplars):
             total_num_tokens = num_tokens_from_messages(
@@ -189,7 +205,7 @@ def eval_sample(task_id, args, sample):
             messages=message,
             model=args.model,
             temperature=args.temperature,
-            stop_tokens=["Task:", "obs:"],
+            stop_tokens=["Task:", "obs:"], # I wonder why these were chosen.
         )
         conversation.append({"input": message, "output": response, "token_stats": info})
         for k, v in info.items():
@@ -197,6 +213,7 @@ def eval_sample(task_id, args, sample):
         pred_act = extract_from_response(response, "`")
         pred_op, pred_id, pred_val = parse_act_str(pred_act)
         target_op, _, target_val = parse_act_str(target_act)
+
 
         # calculate metrics
         pos_ids = [c["backend_node_id"] for c in s["pos_candidates"]][:1]
@@ -285,10 +302,14 @@ def eval_sample_llama(
             memory_mapping = json.load(f)
         if not args.no_memory:
             specifier = get_specifiers_from_sample(sample)
-            retrieved_exemplar_names, scores = retrieve_exemplar_name(
+            retrieved_exemplar_names, scores, retrieved_exemplar_ids = retrieve_exemplar_name(
                 memory, specifier, args.retrieve_top_k
             )
             exemplars = [memory_mapping[name] for name in retrieved_exemplar_names]
+            print("exemplars")
+            for id in retrieved_exemplar_ids:
+                print(id)
+            
         else:
             seed = 0
             random.seed(seed)

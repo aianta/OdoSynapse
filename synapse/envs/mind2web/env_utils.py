@@ -129,6 +129,8 @@ def get_top_k_obs(s: dict, top_k: int, use_raw: bool = True) -> tuple[str, str]:
     neg_ids = [c["backend_node_id"] for c in neg_candidates]
     # Prune html with all candidates
     all_candidates = pos_ids + neg_ids
+
+    
     obs = get_target_obs(etree.fromstring(s["cleaned_html"]), all_candidates)
     # If there is no positive candidate in cleaned_html, get it from raw_html
     if len(s["pos_candidates"]) == 0:
