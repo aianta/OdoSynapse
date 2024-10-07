@@ -5,6 +5,12 @@ import os
 import random
 from pathlib import Path
 
+from synapse.utils.guidance import(
+    make_guidance_request_from_exemplars,
+    get_guidance,
+    prune_exemplars
+)
+
 from synapse.envs.mind2web.env_utils import (
     get_target_obs_and_act,
     get_top_k_obs,
@@ -307,8 +313,19 @@ def eval_sample_llama(
             )
             exemplars = [memory_mapping[name] for name in retrieved_exemplar_names]
             print("exemplars")
-            for id in retrieved_exemplar_ids:
-                print(id)
+            
+
+            guidance_id, step, actions = get_guidance(make_guidance_request_from_exemplars(exemplars))
+                            
+            print("guidance_id: ", guidance_id)
+            print("step: ", step)
+            print("actions: ", actions)
+
+            pruned_exemplars = prune_exemplars(exemplars, actions)
+
+            for exemplar in pruned_exemplars:
+                print("pruned exemplar: ", exemplar)
+
             
         else:
             seed = 0
