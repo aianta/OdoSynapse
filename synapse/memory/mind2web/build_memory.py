@@ -42,6 +42,7 @@ def build_memory(memory_path: str, data_dir: str, top_k: int = 3):
         prev_obs = []
         prev_actions = []
         prev_ids = []
+        prev_tasks = []
         for s, act_repr in zip(sample["actions"], sample["action_reprs"]):
             # add prediction scores and ranks to candidates
             sample_id = f"{sample['annotation_id']}_{s['action_uid']}"
@@ -61,11 +62,12 @@ def build_memory(memory_path: str, data_dir: str, top_k: int = 3):
                 prev_obs.append(query + "Observation: `" + target_obs + "`")
             prev_actions.append("Action: `" + target_act + "` (" + act_repr + ")")
             prev_ids.append(sample_id)
+            prev_tasks.append(sample['confirmed_task'])
 
         message = []
-        for o, a, id in zip(prev_obs, prev_actions, prev_ids):
-            message.append({"role": "user", "content": o, "id":(id + "_observation")})
-            message.append({"role": "assistant", "content": a, "id": (id + "_action")})
+        for o, a, id, task in zip(prev_obs, prev_actions, prev_ids, prev_tasks):
+            message.append({"role": "user", "content": o, "id":(id + "_observation"), "task": task})
+            message.append({"role": "assistant", "content": a, "id": (id + "_action"), "task": task})
         exemplars.append(message)
 
     with open(os.path.join(memory_path, "exemplars.json"), "w") as f:

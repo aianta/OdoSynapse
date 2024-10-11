@@ -30,6 +30,7 @@ def create_parser():
     parser.add_argument("--no_trajectory", action="store_true", default=False)
     parser.add_argument("--start_idx", type=int, default=0)
     parser.add_argument("--end_idx", type=int, default=None)
+    parser.add_argument("--guidance", action="store_true", default=False)
 
     return parser
 

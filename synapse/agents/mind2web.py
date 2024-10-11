@@ -8,7 +8,9 @@ from pathlib import Path
 from synapse.utils.guidance import(
     make_guidance_request_from_exemplars,
     get_guidance,
-    prune_exemplars
+    prune_exemplars,
+    get_guidance_with_id,
+    strip_exemplars
 )
 
 from synapse.envs.mind2web.env_utils import (
@@ -78,21 +80,21 @@ def eval_sample(task_id, args, sample):
             memory_mapping = json.load(f)
         if not args.no_memory:
             specifier = get_specifiers_from_sample(sample)
-            retrieved_exemplar_names, scores = retrieve_exemplar_name(
+            retrieved_exemplar_names, scores, _ = retrieve_exemplar_name(
                 memory, specifier, args.retrieve_top_k
             )
             exemplars = [memory_mapping[name] for name in retrieved_exemplar_names]
+
+            if args.guidance: # If guidance is turned on, make the initial guidance request here.
+                g_id, step, actions = get_guidance(make_guidance_request_from_exemplars(exemplars))
+                guidance_id = g_id
+                guidance_actions = actions # used later when populating prompt with relevant exemplars.                
+
+
         else:
             seed = 0
             random.seed(seed)
             exemplars = random.sample(memory_mapping, args.retrieve_top_k)
-
-    sys_message = [
-        {
-            "role": "system",
-            "content": "You are a large language model trained to navigate the web. Output the next action and wait for the next observation. Here is the action space:\n1. `CLICK [id]`: Click on an HTML element with its id.\n2. `TYPE [id] [value]`: Type a string into the element with the id.\n3. `SELECT [id] [value]`: Select a value for an HTML element by its id.",
-        }
-    ]
 
 
 
@@ -101,6 +103,22 @@ def eval_sample(task_id, args, sample):
     previous_k = 5
 
     for s, act_repr in zip(sample["actions"], sample["action_reprs"]):
+
+        if args.guidance:
+            sys_message = [
+                {
+                    "role": "system",
+                    "content": "You are a large language model trained to navigate the web. You are currently on step "+str(step)+" of your task. Output the next action and wait for the next observation. Here is the action space:\n1. `CLICK [id]`: Click on an HTML element with its id.\n2. `TYPE [id] [value]`: Type a string into the element with the id.\n3. `SELECT [id] [value]`: Select a value for an HTML element by its id.",
+                }
+            ]
+        else:
+            sys_message = [
+                {
+                    "role": "system",
+                    "content": "You are a large language model trained to navigate the web. Output the next action and wait for the next observation. Here is the action space:\n1. `CLICK [id]`: Click on an HTML element with its id.\n2. `TYPE [id] [value]`: Type a string into the element with the id.\n3. `SELECT [id] [value]`: Select a value for an HTML element by its id.",
+                }
+            ]
+
         # Here I believe 's' is the action object
         _, target_act = get_target_obs_and_act(s) # Get target observation? and action?
         pos_candidates = [
@@ -145,6 +163,12 @@ def eval_sample(task_id, args, sample):
                 prev_obs.append("Observation: `" + target_obs + "`")
                 prev_actions.append("Action: `" + target_act + "` (" + act_repr + ")")
                 conversation.append("The ground truth element is not in cleaned html")
+
+                # Update guidance
+                if args.guidance:
+                    g_id, step, actions = get_guidance_with_id(guidance_id)
+                    guidance_actions = actions
+
                 continue
 
             query = []
@@ -194,7 +218,17 @@ def eval_sample(task_id, args, sample):
         
         # Demonstration message, the part containing related exemplars.
         demo_message = []
-        for e_id, e in enumerate(exemplars):
+        if args.guidance:
+            exemplars_to_use = prune_exemplars(exemplars, guidance_actions, step)
+        else:
+            exemplars_to_use = strip_exemplars(exemplars)
+
+            # for debugging
+            # print("exemplars[0]:\n", exemplars[0])
+            # print("exemplars_to_use[0]:\n", exemplars_to_use[0])
+            # exit()
+
+        for e_id, e in enumerate(exemplars_to_use):
             total_num_tokens = num_tokens_from_messages(
                 sys_message + demo_message + e + query, args.model
             )
@@ -206,6 +240,12 @@ def eval_sample(task_id, args, sample):
             else:
                 demo_message.extend(e)
 
+        # Update guidance
+        if args.guidance:
+            g_id, step, actions = get_guidance_with_id(guidance_id)
+            guidance_actions = actions
+
+        # Assemble final prompt and generate action
         message = sys_message + demo_message + query
         response, info = generate_response(
             messages=message,
@@ -278,6 +318,9 @@ def eval_sample_llama(
     success = []
     conversation = []
     episode_length = len(sample["action_reprs"])
+    guidance_id = None
+
+    valid_actions = []
 
     # prepare exemplars
     if args.no_trajectory:
@@ -312,19 +355,21 @@ def eval_sample_llama(
                 memory, specifier, args.retrieve_top_k
             )
             exemplars = [memory_mapping[name] for name in retrieved_exemplar_names]
-            print("exemplars")
             
+            if args.guidance: # If guidance is turned on, make the initial guidance request here.
+                print("exemplars")
+                g_id, step, actions = get_guidance(make_guidance_request_from_exemplars(exemplars))
+                guidance_id = g_id
+                guidance_actions = actions # used later when populating prompt with relevant exemplars.                
+                                
+                print("guidance_id: ", guidance_id)
+                print("step: ", step)
+                print("actions: ", actions)
 
-            guidance_id, step, actions = get_guidance(make_guidance_request_from_exemplars(exemplars))
-                            
-            print("guidance_id: ", guidance_id)
-            print("step: ", step)
-            print("actions: ", actions)
+                pruned_exemplars = prune_exemplars(exemplars, actions, step)
 
-            pruned_exemplars = prune_exemplars(exemplars, actions)
-
-            for exemplar in pruned_exemplars:
-                print("pruned exemplar: ", exemplar)
+                for exemplar in pruned_exemplars:
+                    print("pruned exemplar: ", exemplar)
 
             
         else:
@@ -380,12 +425,23 @@ def eval_sample_llama(
                 prev_obs.append("Observation: `" + target_obs + "`")
                 prev_actions.append("Action: `" + target_act + "` (" + act_repr + ")")
                 conversation.append("The ground truth element is not in cleaned html")
+
+                # Update guidance
+                if args.guidance:
+                    g_id, step, actions = get_guidance_with_id(guidance_id)
+                    guidance_actions = actions
                 continue
 
             # Add system prompt
             query = f"<<SYS>>\n{system_prompt}\n<</SYS>>\n\n"
             # Add exemplars
-            for e in exemplars:
+            exemplars_to_use = None
+            if args.guidance:
+                exemplars_to_use =  prune_exemplars(exemplars, guidance_actions, step)
+            else:
+                exemplars_to_use = exemplars
+    
+            for e in exemplars_to_use:
                 query += ""
                 for i in range(len(e)):
                     if i % 2 == 0:
@@ -415,6 +471,12 @@ def eval_sample_llama(
                 query += "[INST]\nObservation: `" + obs + "`\n[/INST]\n"
             prev_obs.append("Observation: `" + target_obs + "`")
             prev_actions.append("Action: `" + target_act + "` (" + act_repr + ")")
+
+        # Update guidance
+        if args.guidance:
+            g_id, step, actions = get_guidance_with_id(guidance_id)
+            guidance_actions = actions
+
 
         # generate action
         tok_enc = tokenizer.encode(query)
