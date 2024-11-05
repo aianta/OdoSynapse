@@ -383,3 +383,27 @@ def get_tree_repr(
     tree_repr = re.sub(r"\s+", " ", tree_repr).strip()
 
     return tree_repr, id_mapping
+
+def contains_target_element(state, action):
+    _parser = etree.XMLParser(recover=True)
+    dom_tree = etree.fromstring(action['raw_html'])
+    targets = dom_tree.xpath(f"//*[@data_pw_testid_buckeye='{action['action_uid']}']")
+
+    if len(targets) > 1:
+        print(f"Found {len(targets)} targets in raw_html")
+
+    target_element = targets[0]
+
+    target_backend_node_id = target_element.get('backend_node_id')
+
+    #print("state:\n" + state)
+
+    if f"id=\"{target_backend_node_id}\"":
+        return True
+    else:
+        print("Could not find node with id: " + str(target_backend_node_id) + " in abstracted state!")
+        return False
+
+
+
+

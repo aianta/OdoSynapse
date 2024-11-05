@@ -4,8 +4,12 @@ import os
 import json
 
 global_results = {
+    'context_too_big': 0,
+    'context_too_big_%': 0.0,
     'ground_truth_element_missing': 0,
     'ground_truth_element_missing_%': 0.0,
+    'total_not_attempted': 0,
+    'total_not_attempted_%': 0.0,
     'element_acc': 0,
     'element_acc_possible': 0,
     'element_acc_%': 0.0,
@@ -43,6 +47,8 @@ def main():
 
             global_results['ground_truth_element_missing'] = global_results['ground_truth_element_missing'] + count_ground_truth_elements_missing(result_data)
 
+            global_results['context_too_big'] = global_results['context_too_big'] + count_context_too_big(result_data)
+
             # The results are in the last element of the json array
             result_object = result_data[len(result_data)-1]
 
@@ -72,6 +78,12 @@ def main():
     # Compute % not attempted because of ground truth element missing
     global_results['ground_truth_element_missing_%'] = global_results['ground_truth_element_missing'] / global_results['element_acc_possible']
 
+    global_results['context_too_big_%'] = global_results['context_too_big'] / global_results['element_acc_possible']
+
+    global_results['total_not_attempted'] = global_results['context_too_big'] + global_results['ground_truth_element_missing']
+
+    global_results['total_not_attempted_%'] = global_results['total_not_attempted'] / global_results['element_acc_possible']
+
     print(global_results)
 
 def compute_percent(field_name):
@@ -81,6 +93,14 @@ def tally(field_name, results):
     for sample in results:
         global_results[field_name] = global_results[field_name] + sample
         global_results[field_name + '_possible'] = global_results[field_name + '_possible'] + 1
+
+def count_context_too_big(results):
+    count = 0
+    for element in results:
+            if "output" in element and "FAILED DUE TO THE CONTEXT" in element['output']:
+                count = count + 1
+    
+    return count
 
 def count_ground_truth_elements_missing(results):
     count = 0

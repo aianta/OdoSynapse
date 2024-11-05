@@ -5,6 +5,10 @@ import os
 import random
 from pathlib import Path
 
+from synapse.utils.state_abstraction import(
+    get_state_abstraction
+)
+
 from synapse.utils.guidance import(
     make_guidance_request_from_exemplars,
     get_guidance,
@@ -19,6 +23,7 @@ from synapse.envs.mind2web.env_utils import (
     calculate_f1,
     parse_act_str,
     construct_act_str,
+    contains_target_element
 )
 from synapse.utils.llm import (
     generate_response,
@@ -128,16 +133,31 @@ def eval_sample(task_id, args, sample):
         if args.no_trajectory:
             # Interesting, we simply give up if the ground truth element is not in the cleaned HTML...
             # Continue next loop if the ground truth element is not in the cleaned html
-            if len(pos_candidates) == 0:
+            # if len(pos_candidates) == 0:
+            #     element_acc.append(0)
+            #     action_f1.append(0)
+            #     step_success.append(0)
+            #     prev_actions.append(act_repr)
+            #     conversation.append("The ground truth element is not in cleaned html")
+            #     continue
+            
+            # Here I guess we get the refined observation and all candidates (pos/neg)...
+            # obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+            obs = get_state_abstraction(sample['website'], s['raw_html'])
+
+            #if obs is None:
+            if not contains_target_element(obs, s):
                 element_acc.append(0)
                 action_f1.append(0)
                 step_success.append(0)
                 prev_actions.append(act_repr)
                 conversation.append("The ground truth element is not in cleaned html")
+                # Update guidance
+                if args.guidance:
+                    g_id, step, actions = get_guidance_with_id(guidance_id)
+                    guidance_actions = actions
                 continue
-            
-            # Here I guess we get the refined observation and all candidates (pos/neg)...
-            obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+
             # Setup query string for the prompt.
             query = f"Observation:\n```\n{obs}\n```\nTask: {sample['confirmed_task']}\nPrevious actions:\n"
             # Add previous k number of previous actions to the query string, by default 5
@@ -154,13 +174,17 @@ def eval_sample(task_id, args, sample):
             query = [{"role": "user", "content": query}]
             prev_actions.append(act_repr) # Add the action representation to the previous action list. 
         else:
-            target_obs, _ = get_top_k_obs(s, args.previous_top_k_elements)
+            #target_obs, _ = get_top_k_obs(s, args.previous_top_k_elements)
+            target_obs = get_state_abstraction(sample['website'], s['raw_html'])
+            
             # Continue next loop if the ground truth element is not in the cleaned html
-            if len(pos_candidates) == 0:
+            #if target_obs is None:
+            if not contains_target_element(target_obs, s):
+                backup_obs,_ = get_top_k_obs(s, args.previous_top_k_elements) 
                 element_acc.append(0)
                 action_f1.append(0)
                 step_success.append(0)
-                prev_obs.append("Observation: `" + target_obs + "`")
+                prev_obs.append("Observation: `" + backup_obs + "`")
                 prev_actions.append("Action: `" + target_act + "` (" + act_repr + ")")
                 conversation.append("The ground truth element is not in cleaned html")
 
@@ -184,7 +208,8 @@ def eval_sample(task_id, args, sample):
                 else:
                     query.append({"role": "user", "content": o})
                 query.append({"role": "assistant", "content": a})
-            obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+            #obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+            obs = get_state_abstraction(sample['website'], s['raw_html'])
             if len(query) == 0:
                 query.append(
                     {
@@ -391,14 +416,6 @@ def eval_sample_llama(
         ]
 
         if args.no_trajectory:
-            # Continue next loop if the ground truth element is not in the cleaned html
-            if len(pos_candidates) == 0:
-                element_acc.append(0)
-                action_f1.append(0)
-                step_success.append(0)
-                prev_actions.append(act_repr)
-                conversation.append("The ground truth element is not in cleaned html")
-                continue
 
             # Add system prompt
             query = f"<<SYS>>\n{system_prompt}\n<</SYS>> </s>\n\n"
@@ -406,7 +423,23 @@ def eval_sample_llama(
             for e in exemplars:
                 query += f"<s>[INST] {e[0]} [/INST] {e[1]} </s>"
             # Add current information
-            obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+            #obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+            obs = get_state_abstraction(sample['website'],s['raw_html'])
+
+            # Continue next loop if the ground truth element is not in the cleaned html
+            #if obs is None:
+            if not contains_target_element(obs, s):
+                element_acc.append(0)
+                action_f1.append(0)
+                step_success.append(0)
+                prev_actions.append(act_repr)
+                conversation.append("The ground truth element is not in cleaned html")
+                # Update guidance
+                if args.guidance:
+                    g_id, step, actions = get_guidance_with_id(guidance_id)
+                    guidance_actions = actions
+                continue                
+
             query += f"<s>[INST] Observation:\n```\n{obs}\n```\nTask: {sample['confirmed_task']}\nPrevious actions:\n"
             if len(prev_actions) > 0:
                 for a in prev_actions[-previous_k:]:
@@ -416,9 +449,11 @@ def eval_sample_llama(
             query += "Next action: [/INST]"
             prev_actions.append(act_repr)
         else:
-            target_obs, _ = get_top_k_obs(s, args.previous_top_k_elements)
+            #target_obs, _ = get_top_k_obs(s, args.previous_top_k_elements)
+            target_obs = get_state_abstraction(sample['website'], s['raw_html'])
             # Continue next loop if the ground truth element is not in the cleaned html
-            if len(pos_candidates) == 0:
+            #if target_obs is None:
+            if not contains_target_element(target_obs, s):
                 element_acc.append(0)
                 action_f1.append(0)
                 step_success.append(0)
@@ -460,7 +495,9 @@ def eval_sample_llama(
                 else:
                     query += "[INST]\n" + o + "\n[/INST]\n"
                 query += a + "\n"
-            obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+            #obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+            obs = get_state_abstraction(sample['website'], s['raw_html'])
+
             if len(prev_obs) == 0:
                 query += (
                     f"[INST]\nTask: {sample['confirmed_task']}\nTrajectory:\nObservation: `"

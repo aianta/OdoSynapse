@@ -5,6 +5,10 @@ import os
 from datasets import Dataset
 from tqdm import tqdm
 
+from synapse.utils.state_abstraction import (
+    get_state_abstraction
+)
+
 from synapse.envs.mind2web.env_utils import (
     load_json,
     get_top_k_obs,
@@ -46,7 +50,8 @@ def build_dataset(args, samples):
                 previous_k = 5
                 # Continue next loop if the ground truth element is not in the cleaned html
                 if len(pos_candidates) != 0:
-                    obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+                    #obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+                    obs = get_state_abstraction(sample['website'],s['raw_html'])
                     query = f"<<SYS>>\n{system_prompt}\n<</SYS>> </s>\n\n"
                     query += f"<s>[INST] Observation:\n```\n{obs}\n```\nTask: {sample['confirmed_task']}\nPrevious actions:\n"
                     if len(prev_actions) > 0:
@@ -60,8 +65,10 @@ def build_dataset(args, samples):
 
             else:
                 # Continue next loop if the ground truth element is not in the cleaned html
-                if len(pos_candidates) != 0:
-                    obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+                #if len(pos_candidates) != 0:
+                if True:
+                    #obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
+                    obs = get_state_abstraction(sample['website'], s['raw_html'])
                     query = f"<<SYS>>\n{system_prompt}\n<</SYS>>\n\n"
                     for i in range(len(prev_obs)):
                         o, a = prev_obs[i], prev_actions[i]
@@ -84,7 +91,8 @@ def build_dataset(args, samples):
                         query += "[INST]\nObservation: `" + obs + "`\n[/INST]\n"
                     input_dataset.append(query)
                     output_dataset.append("Action: `" + target_act + "` </s>")
-                target_obs, _ = get_top_k_obs(s, args.previous_top_k)
+                #target_obs, _ = get_top_k_obs(s, args.previous_top_k)
+                target_obs = get_state_abstraction(sample['website'], s['raw_html'])
                 prev_obs.append("Observation: `" + target_obs + "`")
                 prev_actions.append("Action: `" + target_act + "` (" + act_repr + ")")
 

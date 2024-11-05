@@ -6,6 +6,10 @@ import json
 import pickle
 from tqdm import tqdm
 
+from synapse.utils.state_abstraction import (
+    get_state_abstraction
+)
+
 from synapse.envs.mind2web.env_utils import (
     load_json,
     get_target_obs_and_act,
@@ -53,7 +57,8 @@ def build_memory(memory_path: str, data_dir: str, top_k: int = 3):
                     candidate["rank"] = candidate_ranks[sample_id][candidate_id]
 
             _, target_act = get_target_obs_and_act(s)
-            target_obs, _ = get_top_k_obs(s, top_k)
+            #target_obs, _ = get_top_k_obs(s, top_k)
+            target_obs = get_state_abstraction(sample['website'], s['raw_html'])
 
             if len(prev_obs) > 0:
                 prev_obs.append("Observation: `" + target_obs + "`")
