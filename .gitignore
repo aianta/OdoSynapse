@@ -2,3 +2,8 @@ results
 mind2web
 __pycache__/
 exemplars.json
+*.db
+lxml-test.py
+re_test.py
+*.json
+*.html

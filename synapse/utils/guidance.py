@@ -66,11 +66,16 @@ def make_guidance_request_from_exemplars(exemplars):
 
                 if annotation_id not in guidance_request_body:
                     guidance_request_body[annotation_id] = []
+
                     
                 if action_id not in guidance_request_body[annotation_id]:
                     guidance_request_body[annotation_id].append(action_id)
-                
+
+
+
     print("Guidance request body: ", guidance_request_body)
+
+
     return guidance_request_body
 
 '''

@@ -6,7 +6,9 @@ import random
 from pathlib import Path
 
 from synapse.utils.state_abstraction import(
-    get_state_abstraction
+    get_state_abstraction,
+    make_trajectory_info_from_exemplars,
+    get_annotated_state_abstraction
 )
 
 from synapse.utils.guidance import(
@@ -100,7 +102,8 @@ def eval_sample(task_id, args, sample):
             seed = 0
             random.seed(seed)
             exemplars = random.sample(memory_mapping, args.retrieve_top_k)
-
+    
+    trajectory_info = make_trajectory_info_from_exemplars(exemplars)
 
 
     prev_actions = []
@@ -120,7 +123,7 @@ def eval_sample(task_id, args, sample):
             sys_message = [
                 {
                     "role": "system",
-                    "content": "You are a large language model trained to navigate the web. Output the next action and wait for the next observation. Here is the action space:\n1. `CLICK [id]`: Click on an HTML element with its id.\n2. `TYPE [id] [value]`: Type a string into the element with the id.\n3. `SELECT [id] [value]`: Select a value for an HTML element by its id.",
+                    "content": "You are a large language model trained to navigate the web. Elements associated with actions from previous related trajectories are annotated in new observations. For example: <btn trajectory-1> Submit </btn> indicates that the button was also used in the first example trajectory. When available, use these annotations to narrow down which elements are important for the current trajectory. Output the next action and wait for the next observation. Here is the action space:\n1. `CLICK [id]`: Click on an HTML element with its id.\n2. `TYPE [id] [value]`: Type a string into the element with the id.\n3. `SELECT [id] [value]`: Select a value for an HTML element by its id.",
                 }
             ]
 
@@ -144,6 +147,7 @@ def eval_sample(task_id, args, sample):
             # Here I guess we get the refined observation and all candidates (pos/neg)...
             # obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
             obs = get_state_abstraction(sample['website'], s['raw_html'])
+            # obs = get_annotated_state_abstraction(sample['website'], s['raw_html'], trajectory_info)
 
             #if obs is None:
             if not contains_target_element(obs, s):
@@ -175,8 +179,9 @@ def eval_sample(task_id, args, sample):
             prev_actions.append(act_repr) # Add the action representation to the previous action list. 
         else:
             #target_obs, _ = get_top_k_obs(s, args.previous_top_k_elements)
-            target_obs = get_state_abstraction(sample['website'], s['raw_html'])
-            
+            #target_obs = get_state_abstraction(sample['website'], s['raw_html'])
+            target_obs = get_annotated_state_abstraction(sample['website'], s['raw_html'], trajectory_info)
+
             # Continue next loop if the ground truth element is not in the cleaned html
             #if target_obs is None:
             if not contains_target_element(target_obs, s):
@@ -209,7 +214,8 @@ def eval_sample(task_id, args, sample):
                     query.append({"role": "user", "content": o})
                 query.append({"role": "assistant", "content": a})
             #obs, _ = get_top_k_obs(s, args.top_k_elements, use_raw=False)
-            obs = get_state_abstraction(sample['website'], s['raw_html'])
+            #obs = get_state_abstraction(sample['website'], s['raw_html'])
+            obs = get_annotated_state_abstraction(sample['website'], s['raw_html'], trajectory_info)
             if len(query) == 0:
                 query.append(
                     {
