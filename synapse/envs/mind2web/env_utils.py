@@ -398,7 +398,7 @@ def contains_target_element(state, action):
 
     #print("state:\n" + state)
 
-    if f"id=\"{target_backend_node_id}\"":
+    if f"id=\"{target_backend_node_id}\"" in state:
         return True
     else:
         print("Could not find node with id: " + str(target_backend_node_id) + " in abstracted state!")
