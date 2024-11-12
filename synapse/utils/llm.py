@@ -32,7 +32,7 @@ def num_tokens_from_messages(messages, model="gpt-4o-mini-2024-07-18"):
         "gpt-4-32k-0613",
         "gpt-4o-mini-2024-07-18",
         "gpt-4o-2024-08-06",
-        "o1-mini"
+        "o1-mini",
         }:
         tokens_per_message = 3
         tokens_per_name = 1
@@ -70,7 +70,8 @@ MAX_TOKENS = {
     "gpt-3.5-turbo-16k-0613": 16385,
     "gpt-3.5-turbo-1106": 16385,
     "o1-mini": 128000,
-    "gpt-4o": 128000
+    "gpt-4o": 128000,
+    "gpt-4o-mini": 128000
 }
 
 
@@ -87,7 +88,8 @@ def get_mode(model: str) -> str:
         "gpt-4-0613",
         "gpt-4-32k-0613",
         'o1-mini',
-        'gpt-4o'
+        'gpt-4o',
+        'gpt-4o-mini'
     ]:
         return "chat"
     elif model in [
