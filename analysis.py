@@ -184,6 +184,10 @@ def main():
 
             task_description = get_task_from_results(results) # get the test task description corresponding with this results file
             print(f"Task description from results was: {task_description}") 
+            
+            if task_description == None:
+                continue #This can happen if none of the steps worked for a task, for example if all steps did not have the ground truth element in the abstracted state
+            
             task_info = get_task(task_description, test_data) # use the task description to find the correct task from the loaded test data
             print(f"task_info is None: {task_info == None}")
 
